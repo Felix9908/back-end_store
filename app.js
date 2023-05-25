@@ -210,6 +210,16 @@ server.get("/users",verifyToken,(req,res)=>{
   })
 })
 
+server.delete("/deleteUser/:id", verifyToken, (req, res) => {
+  const id = req.params.id;
+  db.query(`DELETE FROM users WHERE id = ${id}`, (err, resp) => {
+    if (err) {
+      res.status(400).send(`Error: ${err}`);
+    } else {
+      res.status(200).send("User deleted");
+    }
+  });
+});
 server.listen(port, () =>
   console.log(`the server is active on the port ${port}`)
 );
