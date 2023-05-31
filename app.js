@@ -79,7 +79,7 @@ server.post("/create", upload.single("image"), function (req, res, next) {
       console.error("Error inserting data into SQL table:", err);
       res.status(500).send("Error inserting data into SQL table");
     } else {
-      res.status(200).send("Data and image uploaded successfully");
+      res.status(200).send("Product uploaded successfully");
     }
   });
 });
@@ -173,10 +173,10 @@ server.post("/login", (req, res) => {
 });
 
 server.post("/createUser", (req, res) => {
-  const { username, password, fullName, email, phoneNumber, address, privUser } = req.body;
+  const { username, password, fullName, email, privUser } = req.body;
   
-  const sql = "INSERT INTO users (user, password, completeName, email, phoneNumber, address, privUser) VALUES (?, ?, ?, ?, ?, ?, ?)";
-  const values = [username, password, fullName, email, phoneNumber, address, privUser];
+  const sql = "INSERT INTO users (user, password, fullName, email, privUser) VALUES (?, ?, ?, ?, ?)";
+  const values = [username, password, fullName, email, privUser];
   
   db.query(sql, values, (err, result) => {
     if (err) {
@@ -220,6 +220,86 @@ server.delete("/deleteUser/:id", verifyToken, (req, res) => {
     }
   });
 });
+
+// Crear un comentario
+server.post("/comments/create", verifyToken, (req, res) => {
+  const { productId, text, clientName } = req.body;
+
+  if (!productId || !text || !clientName) {
+    res.status(400).send("No se recibieron todos los datos requeridos");
+    return;
+  }
+
+  const sql =
+    "INSERT INTO comments (product_id, text, clientName) VALUES (?, ?, ?)";
+
+  const values = [productId, text, clientName];
+
+  db.query(sql, values, (err, result) => {
+    if (err) {
+      console.error("Error inserting data into comments table:", err);
+      res.status(500).send("Error inserting data into comments table");
+    } else {
+      res.status(200).send("Comentario creado exitosamente");
+    }
+  });
+});
+
+// Borrar un comentario
+server.delete("/comments/delete/:id", verifyToken, (req, res) => {
+  const commentId = req.params.id;
+
+  const sql = "DELETE FROM comments WHERE id = ?";
+
+  db.query(sql, [commentId], (err, result) => {
+    if (err) {
+      console.error("Error deleting data from comments table:", err);
+      res.status(500).send("Error deleting data from comments table");
+    } else {
+      res.status(200).send("Comentario eliminado exitosamente");
+    }
+  });
+});
+
+// Editar un comentario
+server.put("/comments/edit/:id", verifyToken, (req, res) => {
+  const commentId = req.params.id;
+  const { text } = req.body;
+
+  if (!text) {
+    res.status(400).send("No se recibieron todos los datos requeridos");
+    return;
+  }
+
+  const sql = "UPDATE comments SET text = ? WHERE id = ?";
+
+  db.query(sql, [text, commentId], (err, result) => {
+    if (err) {
+      console.error("Error updating data in comments table:", err); 
+      res.status(500).send("Error updating data in comments table");
+    } else {
+      res.status(200).send("Comentario editado exitosamente");
+    }
+  });
+});
+
+// Obtener todos los comentarios y enviarlos al frontend
+server.get("/comments/:productId", (req, res) => {
+  const productId = req.params.productId;
+  const sql = "select * from comments where product_id = ?";
+
+  db.query(sql, [productId], (err, result) => {
+    if (err) {
+      console.error("Error fetching data from comments table:", err);
+      res.status(500).send("Error fetching data from comments table");
+    } else {
+      res.status(200).json(result);
+    }
+  });
+});
+
+
+
 server.listen(port, () =>
   console.log(`the server is active on the port ${port}`)
 );
