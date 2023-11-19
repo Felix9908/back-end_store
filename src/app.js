@@ -1,16 +1,16 @@
-const express = require("express");
-const mysql2 = require("mysql2");
-const cors = require("cors");
-const jwt = require("jsonwebtoken");
-const multer = require("multer");
+import express from 'express'
+import mysql2 from 'mysql2'
+import cors from 'cors'
+import jwt from 'jsonwebtoken'
+import multer from 'multer'
 const upload = multer({ dest: "uploads/" });
-const crypto = require("crypto");
-const nodemailer = require("nodemailer");
-const fs = require("fs");
+import crypto from 'crypto'
+import nodemailer from 'nodemailer'
+import fs from 'fs'
+import {PORT, DB_HOST, DB_USER, DB_PASSWORD, DB_DATABASE, DB_PORT} from './config.js'
 
 const server = express();
 server.use(cors());
-const port = 9999;
 
 function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -21,14 +21,15 @@ server.use("/uploads", express.static("uploads"));
 
 server.use(express.json());
 server.use(express.urlencoded({ extended: true }));
-const keys = require("./settings/keys");
-const secret_key = keys.key;
+import {secret_key} from '../settings/keys.js'
+
 
 const db = mysql2.createConnection({
-  host: "db4free.net",
-  user: "xtremedb",
-  password: "Felixrfy1234*",
-  database: "storedb001",
+  host: DB_HOST,
+  user: DB_USER,
+  password: DB_PASSWORD,
+  database: DB_DATABASE,
+  port: DB_PORT,
 });
 
 db.connect((err) => {
@@ -39,7 +40,7 @@ db.connect((err) => {
   console.log("Connected to the database!");
 });
 
-verifyToken = (req, res, next) => {
+const verifyToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
   if (token == null) return res.sendStatus(403);
@@ -181,46 +182,57 @@ server.delete("/deleteProducts/:id", verifyToken, function (req, res) {
   const deleteSql = "DELETE FROM products WHERE id = ?";
   const deleteCommentsSql = "DELETE FROM comments WHERE product_id = ?";
 
-  db.query(selectSql, [productId], function (err, result) {
-    if (err) {
-      console.error("Error querying data from SQL table:", err);
-      res.status(500).send("Error querying data from SQL table");
+  // Primero, eliminamos los comentarios asociados al producto
+  db.query(deleteCommentsSql, [productId], (errComments, responseComments) => {
+    if (errComments) {
+      console.error("Error deleting comments from SQL table:", errComments);
+      res.status(500).send("Error deleting comments from SQL table");
       return;
     }
 
-    if (result.length === 0) {
-      res.status(404).send("Product not found");
-      return;
-    }
-
-    const imageName = result[0].nameImg;
-
-    db.query(deleteCommentsSql, [productId], (err2, response) => {
-      if (err2) {
-        res.status(500).send(err2);
-      }
-    });
-
-    db.query(deleteSql, [productId], function (err, result) {
-      if (err) {
-        console.error("Error deleting data from SQL table:", err);
-        res.status(500).send("Error deleting data from SQL table");
+    // Luego, obtenemos la información del producto para obtener el nombre de la imagen
+    db.query(selectSql, [productId], function (errSelect, result) {
+      if (errSelect) {
+        console.error("Error querying data from SQL table:", errSelect);
+        res.status(500).send("Error querying data from SQL table");
         return;
       }
 
-      // Borra la foto físicamente
-      fs.unlink(`uploads/${imageName}`, (err) => {
-        if (err) {
-          console.error("Error deleting image file:", err);
-          res.status(500).send("Error deleting image file");
-          return;
-        }
+      if (result.length === 0) {
+        res.status(404).send("Product not found");
+        return;
+      }
 
-        res.status(200).send("Product and image deleted successfully");
-      });
+      const imageName = result[0].nameImg;
+
+      // Verificamos si se eliminaron comentarios antes de proceder con la eliminación del producto
+      if (responseComments.affectedRows > 0) {
+        // Se eliminaron comentarios, ahora podemos eliminar el producto y la imagen físicamente
+        db.query(deleteSql, [productId], function (errDelete, resultDelete) { 
+          if (errDelete) {
+            console.error("Error deleting data from SQL table:", errDelete);
+            res.status(500).send("Error deleting data from SQL table");
+            return;
+          }
+
+          fs.unlink(`uploads/${imageName}`, (errUnlink) => {
+            if (errUnlink) {
+              console.error("Error deleting image file:", errUnlink);
+              res.status(500).send("Error deleting image file");
+              return;
+            }
+
+            res.status(200).send("Product and image deleted successfully");
+          });
+        });
+      } else {
+        // No se eliminaron comentarios, lo que significa que hay pedidos asociados al producto
+        res.status(400).send("Todavia hay usuarios con ordenes de este producto");
+      }
     });
   });
 });
+
 
 server.get("/data", function (req, res, next) {
   const sql = "SELECT * FROM products";
@@ -236,41 +248,39 @@ server.get("/data", function (req, res, next) {
 });
 
 server.post("/login", (req, res) => {
-  const email = req.body.email;
+  const UserName = req.body.userName;
   const password = req.body.password;
-  db.query(
-    "SELECT * FROM users WHERE email = ? and password = ?",
-    [email, password],
-    (err, data) => {
-      if (err) {
-        res.status(400).send(err);
+  const sql = "SELECT * FROM users WHERE username = ? and password = ?";
+  db.query(sql, [UserName, password], (err, data) => {
+    if (err) {
+      res.status(400).send(err);
+    } else {
+      if (data.length > 0) {
+        const payload = {
+          check: true,
+          data: data,
+        };
+        jwt.sign(payload, "secret_key", (err, token) => {
+          if (err) {
+            res.status(400).send(err);
+          } else {
+            res.send({
+              msg: "AUTEMTICACION EXITOSA",
+              token: token,
+              userData: data,
+            });
+          }
+        });
       } else {
-        if (data.length > 0) {
-          const payload = {
-            check: true,
-            data: data,
-          };
-          jwt.sign(payload, "secret_key", (err, token) => {
-            if (err) {
-              res.status(400).send(err);
-            } else {
-              res.send({
-                msg: "AUTEMTICACION EXITOSA",
-                token: token,
-                userData: data,
-              });
-            }
-          });
-        } else {
-          res.send({ msg: "No se encontraron datos de usuario" });
-        }
+        res.send({ msg: "No se encontraron datos de usuario" });
       }
     }
-  );
+  });
 });
 
 server.post("/createUser", (req, res) => {
   const { username, password, fullName, email, privUser } = req.body;
+  const mode = 0;
 
   // Verificar si el correo ya existe en la base de datos
   const checkEmailQuery = "SELECT * FROM users WHERE email = ?";
@@ -286,8 +296,8 @@ server.post("/createUser", (req, res) => {
     } else {
       // Si el correo no existe, insertar el nuevo usuario en la tabla users
       const insertUserQuery =
-        "INSERT INTO users (userName, password, fullName, email, privUser) VALUES (?, ?, ?, ?, ?)";
-      const values = [username, password, fullName, email, privUser];
+        "INSERT INTO users (userName, password, fullName, email, privUser, mode) VALUES (?, ?, ?, ?, ?, ?)";
+      const values = [username, password, fullName, email, privUser, mode];
 
       db.query(insertUserQuery, values, (err, result) => {
         if (err) {
@@ -465,7 +475,8 @@ server.post("/buys", verifyToken, function (req, res) {
       const userEmail = authData.data[0].email;
       const userName = authData.data[0].fullName;
       const commentExtra = null;
-      const estado = "pendiente";
+      const estadoEntVendedor = "pendiente";
+      const estadoEntCliente = "pendiente";
       const {
         amount,
         productName,
@@ -479,7 +490,7 @@ server.post("/buys", verifyToken, function (req, res) {
       } = req.body;
 
       const sql =
-        "INSERT INTO compras (producto_id, cliente_id, nombre_cliente, nombre_producto, direccion_cliente, numero_telefono, correo_electronico, cantidad_producto, precio_producto, precio_total, commentExtra, fecha_compra,estado) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        "INSERT INTO compras (producto_id, cliente_id, nombre_cliente, nombre_producto, direccion_cliente, numero_telefono, correo_electronico, cantidad_producto, precio_producto, precio_total, commentExtra, fecha_compra,estadoEntVendedor,estadoEntCliente) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?)";
 
       const values = [
         id,
@@ -494,7 +505,8 @@ server.post("/buys", verifyToken, function (req, res) {
         totalPrice,
         commentExtra,
         fecha_compra,
-        estado,
+        estadoEntVendedor,
+        estadoEntCliente,
       ];
 
       db.query(sql, values, function (err, result) {
@@ -537,12 +549,29 @@ server.get("/getbuys", verifyToken, async (req, res) => {
 });
 
 //update compras
-server.put("/putBuys", verifyToken, async (req, res) => {
+server.put("/putBuysVendedor", verifyToken, async (req, res) => {
   const { id } = req.body.id;
-  console.log(id)
   try {
     db.query(
-      `UPDATE compras SET estado = "vendido"  WHERE id = ${id}`,
+      `UPDATE compras SET estadoEntVendedor = "vendido"  WHERE id = ${id}`,
+      (err, response) => {
+        if (err) {
+          res.status(400).send(err);
+        } else {
+          res.status(200).send("Aclualizado");
+        }
+      }
+    );
+  } catch (err) {
+    res.status(500).send(err);
+  }
+});
+
+server.put("/putBuysCliente", verifyToken, async (req, res) => {
+  const { id } = req.body.id;
+  try {
+    db.query(
+      `UPDATE compras SET estadoEntCliente = "vendido"  WHERE id = ${id}`,
       (err, response) => {
         if (err) {
           res.status(400).send(err);
@@ -573,31 +602,67 @@ server.delete("/deleteBuy/:id", verifyToken, async (req, res) => {
 });
 
 //get tienda
-server.get("/getTienda", (req,res)=>{
-  db.query('SELECT * FROM tienda', (err,result)=>{
-    if(err){
-      res.status(404).send(err)
-    }else{
-      res.status(200).send(result)
+server.get("/getTienda", (req, res) => {
+  db.query("SELECT * FROM tienda", (err, result) => {
+    if (err) {
+      res.status(404).send(err);
+    } else {
+      res.status(200).send(result);
     }
-  })
-})
+  });
+});
 
 //change discount
-server.post("/changeDiscount", verifyToken, (req,res)=>{
-  const {select, discount, id} = req.body
+server.post("/changeDiscount", verifyToken, (req, res) => {
+  const { select, discount, id } = req.body;
 
-  const sql = "UPDATE tienda SET estadoDescuento = ?, CatnDescuento = ? WHERE id = ?"
-  db.query(sql,[select,discount,id],(err,response)=>{
-    if(err){
-      res.status(400).send(err)
-    }else{
-      res.status(200).send("Descuento actualizado correctamente")
+  const sql =
+    "UPDATE tienda SET estadoDescuento = ?, CatnDescuento = ? WHERE id = ?";
+  db.query(sql, [select, discount, id], (err, response) => {
+    if (err) {
+      res.status(400).send(err);
+    } else {
+      res.status(200).send("Descuento actualizado correctamente");
     }
-  })
-})
+  });
+});
 
+//update available product
+server.post("/updateAvailable", verifyToken, (req, res) => {
+  const { newAvailable, id } = req.body;
+  const availableInt = parseInt(newAvailable);
+  const sql = "UPDATE products SET available = ? WHERE id = ?";
+  db.query(sql, [availableInt, id], (err, response) => {
+    if (err) {
+      res.status(400).send(err);
+    } else {
+      res.status(200).send("Cantidad disponible actualizada correctamente");
+    }
+  });
+});
 
-server.listen(port, () =>
-  console.log(`the server is active on the port ${port}`)
+//cambiar modo claro o oscuro
+server.put("/changeMode", verifyToken, (req, res) => {
+  const { newModeValue, id } = req.body;
+  const updateQuery = "UPDATE users SET mode = ? WHERE id = ?";
+
+  db.query(updateQuery, [newModeValue, id], (err, result) => {
+    if (err) {
+      res.status(400).json({
+        error: "Error updating mode in users table",
+        details: err.message, // Utilizamos err.message para obtener el mensaje específico del error
+      });
+      // Manejar el error según tus necesidades
+    } else {
+      res.status(200).json({
+        message: "Modo actualizado correctamente",
+        result: result, // Si es necesario, puedes incluir el resultado de la actualización
+      });
+      // Realizar acciones adicionales si es necesario
+    }
+  });
+});
+
+server.listen(PORT, () =>
+  console.log(`the server is active on the port ${PORT}`)
 );
