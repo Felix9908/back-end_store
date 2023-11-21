@@ -16,7 +16,7 @@ CREATE TABLE users (
     fullName VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     privUser VARCHAR(10) NOT NULL CHECK (privUser IN ('Admin', 'Cliente', 'Vendedor', 'Moderador')),
-    code BOOLEAN ;
+    code BOOLEAN 
 );
 
 
@@ -62,7 +62,5 @@ CREATE TABLE tienda (
     id INT PRIMARY KEY AUTO_INCREMENT,
     estadoDescuento varchar (10) not null,
     CatnDescuento INT (10) 
-);2
+);
 
-
-tropypay
