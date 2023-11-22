@@ -1,20 +1,5 @@
 {
-    "version": 2,
-    "builds": [{ "src": "./src/app.js", "use": "@vercel/node" }],
-    "routes": [
-      {
-        "src": "/(.*)",
-        "dest": "/server.js"
-      }
-    ],
-    "env": {
-      "NODE_ENV": "production",
-      "DB_HOST": "monorail.proxy.rlwy.net",
-      "DB_USER": "root",
-      "DB_PASSWORD": "G5bcEbGaBgf6FaHe3GaHgBEfC6adeaAA",
-      "DB_DATABASE": "railway",
-      "DB_PORT": "40389"
-    },
-    "functions": { "api/**/*.js": { "runtime": "nodejs14.x" } }
-  }
-  
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
+  ]
+}
