@@ -23,16 +23,37 @@ server.use(express.json());
 server.use(express.urlencoded({ extended: true }));
 import {secret_key} from '../settings/keys.js'
 
+const createDatabasePool = () => {
+  return mysql2.createPool({
+    host: DB_HOST,
+    user: DB_USER,
+    password: DB_PASSWORD,
+    database: DB_DATABASE,
+    port: DB_PORT,
+    connectionLimit: 10,
+  });
+};
 
-const db = mysql2.createConnection({
-  host: DB_HOST,
-  user: DB_USER,
-  password: DB_PASSWORD,
-  database: DB_DATABASE,
-  port: DB_PORT,
-});
+let db = createDatabasePool();
 
-db.connect((err) => {
+// Función para reconectar en caso de desconexión o error
+const handleDisconnect = () => {
+  db.on('error', (err) => {
+    if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ECONNRESET') {
+      console.error('Database connection was lost. Reconnecting...');
+      db = createDatabasePool(); // Vuelve a crear el pool
+      handleDisconnect(); // Reintentar reconectar
+    } else {
+      throw err;
+    }
+  });
+};
+
+// Llama a la función para manejar la reconexión
+handleDisconnect();
+
+
+db.query("SELECT 1", (err, result) => {
   if (err) {
     console.error("Error connecting to the database:", err);
     return;
@@ -44,7 +65,7 @@ const verifyToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
   if (token == null) return res.sendStatus(403);
-  jwt.verify(token, "secret_key", (err, user) => {
+  jwt.verify(token, secret_key, (err, user) => {
     if (err) return res.sendStatus(404);
     req.user = user;
     next();
@@ -260,7 +281,7 @@ server.post("/login", (req, res) => {
           check: true,
           data: data,
         };
-        jwt.sign(payload, "secret_key", (err, token) => {
+        jwt.sign(payload, secret_key, (err, token) => {
           if (err) {
             res.status(400).send(err);
           } else {
@@ -313,7 +334,7 @@ server.post("/createUser", (req, res) => {
 
 server.put("/logout", verifyToken, function (req, res) {
   const authHeader = req.headers["authorization"];
-  jwt.sign(authHeader, "secret_key", { expiresIn: 1 }, (logout, err) => {
+  jwt.sign(authHeader, secret_key, { expiresIn: 1 }, (logout, err) => {
     if (logout) {
       res.send({ msg: "Has sido desconectado" });
     } else {
@@ -466,7 +487,7 @@ server.post("/buys", verifyToken, function (req, res) {
   const token = authHeader && authHeader.split(" ")[1];
 
   //Desencripta el token para obtener la información del usuario
-  jwt.verify(token, "secret_key", (err, authData) => {
+  jwt.verify(token, secret_key, (err, authData) => {
     if (err) {
       // Si hay un error en el token, responde con un código de estado 403 (Prohibido)
       res.sendStatus(403);
