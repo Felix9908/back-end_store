@@ -1,13 +1,20 @@
-import express from 'express'
-import mysql2 from 'mysql2'
-import cors from 'cors'
-import jwt from 'jsonwebtoken'
-import multer from 'multer'
+import express from "express";
+import mysql2 from "mysql2";
+import cors from "cors";
+import jwt from "jsonwebtoken";
+import multer from "multer";
 const upload = multer({ dest: "uploads/" });
-import crypto from 'crypto'
-import nodemailer from 'nodemailer'
-import fs from 'fs'
-import {PORT, DB_HOST, DB_USER, DB_PASSWORD, DB_DATABASE, DB_PORT} from './config.js'
+import crypto from "crypto";
+import nodemailer from "nodemailer";
+import fs from "fs";
+import {
+  PORT,
+  DB_HOST,
+  DB_USER,
+  DB_PASSWORD,
+  DB_DATABASE,
+  DB_PORT,
+} from "./config.js";
 
 const server = express();
 server.use(cors());
@@ -21,7 +28,7 @@ server.use("/uploads", express.static("uploads"));
 
 server.use(express.json());
 server.use(express.urlencoded({ extended: true }));
-import {secret_key} from '../settings/keys.js'
+import { secret_key } from "../settings/keys.js";
 
 const createDatabasePool = () => {
   return mysql2.createPool({
@@ -38,9 +45,9 @@ let db = createDatabasePool();
 
 // Función para reconectar en caso de desconexión o error
 const handleDisconnect = () => {
-  db.on('error', (err) => {
-    if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ECONNRESET') {
-      console.error('Database connection was lost. Reconnecting...');
+  db.on("error", (err) => {
+    if (err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "ECONNRESET") {
+      console.error("Database connection was lost. Reconnecting...");
       db = createDatabasePool(); // Vuelve a crear el pool
       handleDisconnect(); // Reintentar reconectar
     } else {
@@ -51,7 +58,6 @@ const handleDisconnect = () => {
 
 // Llama a la función para manejar la reconexión
 handleDisconnect();
-
 
 db.query("SELECT 1", (err, result) => {
   if (err) {
@@ -196,28 +202,18 @@ server.post("/create", upload.single("image"), function (req, res, next) {
 });
 
 // Delete Product
-server.delete("/deleteProducts/:id", verifyToken, function (req, res) {
-  const productId = req.params.id;
+server.delete("/deleteProducts/:id", verifyToken, async function (req, res) {
+  try {
+    const productId = req.params.id;
 
-  const selectSql = "SELECT nameImg FROM products WHERE id = ?";
-  const deleteSql = "DELETE FROM products WHERE id = ?";
-  const deleteCommentsSql = "DELETE FROM comments WHERE product_id = ?";
+    const selectSql = "SELECT nameImg FROM products WHERE id = ?";
+    const deleteSql = "DELETE FROM products WHERE id = ?";
+    const deleteCommentsSql = "DELETE FROM comments WHERE product_id = ?";
+    const checkBuys = "SELECT * FROM compras WHERE producto_id = ?";
 
-  // Primero, eliminamos los comentarios asociados al producto
-  db.query(deleteCommentsSql, [productId], (errComments, responseComments) => {
-    if (errComments) {
-      console.error("Error deleting comments from SQL table:", errComments);
-      res.status(500).send("Error deleting comments from SQL table");
-      return;
-    }
-
-    // Luego, obtenemos la información del producto para obtener el nombre de la imagen
-    db.query(selectSql, [productId], function (errSelect, result) {
-      if (errSelect) {
-        console.error("Error querying data from SQL table:", errSelect);
-        res.status(500).send("Error querying data from SQL table");
-        return;
-      }
+    const check = await query(checkBuys, [productId]);
+    if (check.length == 0) {
+      const result = await query(selectSql, [productId]);
 
       if (result.length === 0) {
         res.status(404).send("Product not found");
@@ -226,34 +222,47 @@ server.delete("/deleteProducts/:id", verifyToken, function (req, res) {
 
       const imageName = result[0].nameImg;
 
-      // Verificamos si se eliminaron comentarios antes de proceder con la eliminación del producto
-      if (responseComments.affectedRows > 0) {
-        // Se eliminaron comentarios, ahora podemos eliminar el producto y la imagen físicamente
-        db.query(deleteSql, [productId], function (errDelete, resultDelete) { 
-          if (errDelete) {
-            console.error("Error deleting data from SQL table:", errDelete);
-            res.status(500).send("Error deleting data from SQL table");
-            return;
-          }
+      query(deleteCommentsSql, [productId]);
 
-          fs.unlink(`uploads/${imageName}`, (errUnlink) => {
-            if (errUnlink) {
-              console.error("Error deleting image file:", errUnlink);
-              res.status(500).send("Error deleting image file");
-              return;
-            }
+      await query(deleteSql, [productId]);
 
-            res.status(200).send("Product and image deleted successfully");
-          });
-        });
+      await deleteImage(`uploads/${imageName}`);
+
+      res.status(200).send("Product and image deleted successfully");
+    } else {
+      res.status(202).send("Todavia hay usuarios con pedidos de este producto");
+    }
+  } catch (error) {
+    console.error("Error:", error);
+    res.status(500).send(`Internal Server Error: ${error.message}`);
+  }
+});
+
+// Función para ejecutar consultas SQL
+async function query(sql, values) {
+  return new Promise((resolve, reject) => {
+    db.query(sql, values, (error, result) => {
+      if (error) {
+        reject(error);
       } else {
-        // No se eliminaron comentarios, lo que significa que hay pedidos asociados al producto
-        res.status(400).send("Todavia hay usuarios con ordenes de este producto");
+        resolve(result);
       }
     });
   });
-});
+}
 
+// Función para eliminar una imagen física
+async function deleteImage(imagePath) {
+  return new Promise((resolve, reject) => {
+    fs.unlink(imagePath, (error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
 
 server.get("/data", function (req, res, next) {
   const sql = "SELECT * FROM products";
