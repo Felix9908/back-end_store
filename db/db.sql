@@ -16,7 +16,7 @@ CREATE TABLE users (
     fullName VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     privUser VARCHAR(10) NOT NULL CHECK (privUser IN ('Admin', 'Cliente', 'Vendedor', 'Moderador')),
-    code BOOLEAN 
+    mode BOOLEAN 
 );
 
 

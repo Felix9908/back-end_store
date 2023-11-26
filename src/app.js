@@ -312,7 +312,6 @@ server.post("/createUser", (req, res) => {
   const { username, password, fullName, email, privUser } = req.body;
   const mode = 0;
 
-  // Verificar si el correo ya existe en la base de datos
   const checkEmailQuery = "SELECT * FROM users WHERE email = ?";
   db.query(checkEmailQuery, [email], (err, result) => {
     if (err) {
@@ -326,7 +325,7 @@ server.post("/createUser", (req, res) => {
     } else {
       // Si el correo no existe, insertar el nuevo usuario en la tabla users
       const insertUserQuery =
-        "INSERT INTO users (userName, password, fullName, email, privUser, mode) VALUES (?, ?, ?, ?, ?, ?)";
+        "INSERT INTO users (userName, password, fullName, email, privUser, code) VALUES (?, ?, ?, ?, ?, ?)";
       const values = [username, password, fullName, email, privUser, mode];
 
       db.query(insertUserQuery, values, (err, result) => {
@@ -674,7 +673,7 @@ server.post("/updateAvailable", verifyToken, (req, res) => {
 //cambiar modo claro o oscuro
 server.put("/changeMode", verifyToken, (req, res) => {
   const { newModeValue, id } = req.body;
-  const updateQuery = "UPDATE users SET mode = ? WHERE id = ?";
+  const updateQuery = "UPDATE users SET code = ? WHERE id = ?";
 
   db.query(updateQuery, [newModeValue, id], (err, result) => {
     if (err) {
