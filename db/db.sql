@@ -1,6 +1,6 @@
 CREATE TABLE products (
   id INT PRIMARY KEY auto_increment,
-  productName VARCHAR(255) NOT NULL,
+  productName VARCHAR(255) NOT NULL,int (10)
   type VARCHAR(255) NOT NULL,
   nameImg VARCHAR(255) NOT NULL,
   imagePath VARCHAR(255) NOT NULL,
@@ -16,7 +16,8 @@ CREATE TABLE users (
     fullName VARCHAR(255) NOT NULL,
     email VARCHAR(255) NOT NULL,
     privUser VARCHAR(10) NOT NULL CHECK (privUser IN ('Admin', 'Cliente', 'Vendedor', 'Moderador')),
-    mode BOOLEAN 
+    mode BOOLEAN ,
+    code VARCHAR (10)
 );
 
 
