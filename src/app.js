@@ -21,8 +21,8 @@ const handleDisconnect = () => {
   db.on("error", (err) => {
     if (err.code === "PROTOCOL_CONNECTION_LOST" || err.code === "ECONNRESET") {
       console.error("Database connection was lost. Reconnecting...");
-      db = createDatabasePool(); // Vuelve a crear el pool
-      handleDisconnect(); // Reintentar reconectar
+      db = createDatabasePool();
+      handleDisconnect(); 
     } else {
       throw err;
     }

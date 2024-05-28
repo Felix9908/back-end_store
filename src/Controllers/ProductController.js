@@ -38,7 +38,7 @@ export const deleteProducts = async (req, res) => {
   }
 };
 
-export const createProduct = async (req, res, next) => {
+export const createProduct = async (req, res) => {
   const imageFile = req.file;
   const { productName, type, description, price, available } = req.body;
 
